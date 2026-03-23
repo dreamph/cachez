@@ -4,7 +4,7 @@
 
 It gives you:
 
-- type-safe cache API (`Cache[K, V]`)
+- type-safe cache API (`Cache[V]`) with string keys
 - TTL support
 - in-memory store
 - optional Redis store (separate module)
@@ -41,18 +41,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	store := memory.NewStore[string, User](
-		memory.WithJanitor[string, User](ctx, 30*time.Second),
+	store := memory.NewStore[User](
+		memory.WithJanitor(ctx, 30*time.Second),
 	)
 
-	loggerHook := cachez.HookFunc[string, User](func(ctx context.Context, e cachez.HookEvent[string, User]) {
+	loggerHook := cachez.HookFunc[User](func(ctx context.Context, e cachez.HookEvent[User]) {
 		log.Printf("cache event=%s key=%q err=%v", e.Type, e.Key, e.Err)
 	})
 
-	c := cachez.New[string, User](
+	c := cachez.New[User](
 		store,
-		cachez.WithDefaultTTL[string, User](5*time.Minute),
-		cachez.WithHooks[string, User](loggerHook),
+		cachez.WithDefaultTTL(5*time.Minute),
+		cachez.WithHooks(loggerHook),
 	)
 
 	_ = c.Set(ctx, "user:1", User{ID: 1, Name: "Dream"})
@@ -96,12 +96,12 @@ import (
 )
 
 client := goredis.NewClient(&goredis.Options{Addr: "localhost:6379"})
-store := redisstore.NewStore[string, User](
+store := redisstore.NewStore[User](
 	client,
 	redisstore.WithPrefix("cachez:user:"),
 )
 
-c := cachez.New[string, User](store, cachez.WithDefaultTTL[string, User](5*time.Minute))
+c := cachez.New[User](store, cachez.WithDefaultTTL(5*time.Minute))
 _ = c.Set(context.Background(), "user:1", User{ID: 1, Name: "Dream"})
 ```
 

@@ -19,18 +19,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	store := memory.NewStore[string, User](
-		memory.WithJanitor[string, User](ctx, 30*time.Second),
+	store := memory.NewStore[User](
+		memory.WithJanitor(ctx, 30*time.Second),
 	)
 
-	loggerHook := cachez.HookFunc[string, User](func(ctx context.Context, e cachez.HookEvent[string, User]) {
+	loggerHook := cachez.HookFunc[User](func(ctx context.Context, e cachez.HookEvent[User]) {
 		log.Printf("cache event=%s key=%q err=%v", e.Type, e.Key, e.Err)
 	})
 
-	c := cachez.New[string, User](
+	c := cachez.New[User](
 		store,
-		cachez.WithDefaultTTL[string, User](5*time.Minute),
-		cachez.WithHooks[string, User](loggerHook),
+		cachez.WithDefaultTTL(5*time.Minute),
+		cachez.WithHooks(loggerHook),
 	)
 
 	err := c.Set(ctx, "user:1", User{

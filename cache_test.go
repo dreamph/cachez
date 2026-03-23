@@ -15,8 +15,8 @@ import (
 
 func TestCacheBasic(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
-	c := cachez.New[string, string](store, cachez.WithDefaultTTL[string, string](time.Minute))
+	store := memory.NewStore[string]()
+	c := cachez.New[string](store, cachez.WithDefaultTTL(time.Minute))
 
 	if err := c.Set(ctx, "hello", "world"); err != nil {
 		t.Fatalf("set failed: %v", err)
@@ -38,10 +38,10 @@ func TestCacheExpiration(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	store := memory.NewStore[string, string]()
-	c := cachez.New[string, string](
+	store := memory.NewStore[string]()
+	c := cachez.New[string](
 		store,
-		cachez.WithNowFunc[string, string](func() time.Time { return now }),
+		cachez.WithNowFunc(func() time.Time { return now }),
 	)
 
 	if err := c.Set(ctx, "k1", "v1", time.Second); err != nil {
@@ -61,8 +61,8 @@ func TestCacheExpiration(t *testing.T) {
 
 func TestGetOrLoadSingleflight(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
-	c := cachez.New[string, string](store)
+	store := memory.NewStore[string]()
+	c := cachez.New[string](store)
 
 	var called int32
 	loader := func(ctx context.Context) (string, error) {
@@ -107,8 +107,8 @@ func TestGetOrLoadSingleflight(t *testing.T) {
 
 func TestGetOrLoadNilLoader(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
-	c := cachez.New[string, string](store)
+	store := memory.NewStore[string]()
+	c := cachez.New[string](store)
 
 	_, err := c.GetOrLoad(ctx, "k", time.Minute, nil)
 	if err == nil {
@@ -118,8 +118,8 @@ func TestGetOrLoadNilLoader(t *testing.T) {
 
 func TestGetOrLoadLoaderError(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
-	c := cachez.New[string, string](store)
+	store := memory.NewStore[string]()
+	c := cachez.New[string](store)
 
 	loaderErr := fmt.Errorf("load failed")
 	loader := func(context.Context) (string, error) {
@@ -142,8 +142,8 @@ func TestGetOrLoadLoaderError(t *testing.T) {
 
 func TestCacheDeleteHasClear(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
-	c := cachez.New[string, string](store)
+	store := memory.NewStore[string]()
+	c := cachez.New[string](store)
 
 	if err := c.Set(ctx, "k1", "v1"); err != nil {
 		t.Fatalf("set failed: %v", err)
@@ -196,17 +196,17 @@ func TestCacheDeleteHasClear(t *testing.T) {
 func TestCacheHasExpiredNoSideEffects(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
-	store := memory.NewStore[string, string]()
+	store := memory.NewStore[string]()
 
 	var hookCalls int32
-	h := cachez.HookFunc[string, string](func(context.Context, cachez.HookEvent[string, string]) {
+	h := cachez.HookFunc[string](func(context.Context, cachez.HookEvent[string]) {
 		atomic.AddInt32(&hookCalls, 1)
 	})
 
-	c := cachez.New[string, string](
+	c := cachez.New[string](
 		store,
-		cachez.WithNowFunc[string, string](func() time.Time { return now }),
-		cachez.WithHooks[string, string](h),
+		cachez.WithNowFunc(func() time.Time { return now }),
+		cachez.WithHooks(h),
 	)
 
 	if err := store.Set(ctx, "expired", cachez.Entry[string]{
@@ -237,13 +237,13 @@ func TestCacheGetExpiredDeleteError(t *testing.T) {
 	store := &expiredDeleteErrorStore{deleteErr: deleteErr}
 
 	var errorHooks int32
-	h := cachez.HookFunc[string, string](func(_ context.Context, e cachez.HookEvent[string, string]) {
+	h := cachez.HookFunc[string](func(_ context.Context, e cachez.HookEvent[string]) {
 		if e.Type == cachez.EventError && errors.Is(e.Err, deleteErr) {
 			atomic.AddInt32(&errorHooks, 1)
 		}
 	})
 
-	c := cachez.New[string, string](store, cachez.WithHooks[string, string](h))
+	c := cachez.New[string](store, cachez.WithHooks(h))
 
 	_, ok, err := c.Get(ctx, "k1")
 	if err == nil {
@@ -262,12 +262,12 @@ func TestCacheGetExpiredDeleteError(t *testing.T) {
 
 func TestHooks(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
+	store := memory.NewStore[string]()
 
 	var hitCount int32
 	var missCount int32
 
-	h := cachez.HookFunc[string, string](func(ctx context.Context, e cachez.HookEvent[string, string]) {
+	h := cachez.HookFunc[string](func(ctx context.Context, e cachez.HookEvent[string]) {
 		switch e.Type {
 		case cachez.EventHit:
 			atomic.AddInt32(&hitCount, 1)
@@ -276,7 +276,7 @@ func TestHooks(t *testing.T) {
 		}
 	})
 
-	c := cachez.New[string, string](store, cachez.WithHooks[string, string](h))
+	c := cachez.New[string](store, cachez.WithHooks(h))
 
 	if _, ok, err := c.Get(ctx, "missing"); err != nil {
 		t.Fatal(err)
@@ -307,9 +307,9 @@ func TestJanitorDeletesExpired(t *testing.T) {
 	defer cancel()
 
 	now := time.Now()
-	store := memory.NewStore[string, string](
-		memory.WithNowFunc[string, string](func() time.Time { return now }),
-		memory.WithJanitor[string, string](ctx, 5*time.Millisecond),
+	store := memory.NewStore[string](
+		memory.WithNowFunc(func() time.Time { return now }),
+		memory.WithJanitor(ctx, 5*time.Millisecond),
 	)
 	_ = store.Set(ctx, "k", cachez.Entry[string]{
 		Value:      "v",

@@ -15,19 +15,19 @@ const (
 	EventLoadHit EventType = "load_hit"
 )
 
-type HookEvent[K comparable, V any] struct {
+type HookEvent[V any] struct {
 	Type  EventType
-	Key   K
+	Key   string
 	Value *V
 	Err   error
 }
 
-type Hook[K comparable, V any] interface {
-	OnEvent(ctx context.Context, event HookEvent[K, V])
+type Hook[V any] interface {
+	OnEvent(ctx context.Context, event HookEvent[V])
 }
 
-type HookFunc[K comparable, V any] func(ctx context.Context, event HookEvent[K, V])
+type HookFunc[V any] func(ctx context.Context, event HookEvent[V])
 
-func (f HookFunc[K, V]) OnEvent(ctx context.Context, event HookEvent[K, V]) {
+func (f HookFunc[V]) OnEvent(ctx context.Context, event HookEvent[V]) {
 	f(ctx, event)
 }

@@ -11,7 +11,7 @@ import (
 
 func TestStoreCRUDAndLen(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
+	store := memory.NewStore[string]()
 
 	if got := store.Len(); got != 0 {
 		t.Fatalf("expected len=0, got %d", got)
@@ -71,7 +71,7 @@ func TestStoreCRUDAndLen(t *testing.T) {
 
 func TestStoreDeleteExpired(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore[string, string]()
+	store := memory.NewStore[string]()
 	now := time.Now()
 
 	if err := store.Set(ctx, "expired", cachez.Entry[string]{
@@ -113,8 +113,8 @@ func TestStoreDeleteExpired(t *testing.T) {
 func TestStoreDeleteExpiredNilNowUsesStoreClock(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
-	store := memory.NewStore[string, string](
-		memory.WithNowFunc[string, string](func() time.Time { return now }),
+	store := memory.NewStore[string](
+		memory.WithNowFunc(func() time.Time { return now }),
 	)
 
 	if err := store.Set(ctx, "expired", cachez.Entry[string]{
@@ -145,9 +145,9 @@ func TestStoreWithNowFuncAndJanitor(t *testing.T) {
 	defer cancel()
 
 	now := time.Now()
-	store := memory.NewStore[string, string](
-		memory.WithNowFunc[string, string](func() time.Time { return now }),
-		memory.WithJanitor[string, string](ctx, 5*time.Millisecond),
+	store := memory.NewStore[string](
+		memory.WithNowFunc(func() time.Time { return now }),
+		memory.WithJanitor(ctx, 5*time.Millisecond),
 	)
 
 	if err := store.Set(ctx, "k1", cachez.Entry[string]{
@@ -171,10 +171,10 @@ func TestStoreWithNowFuncAndJanitor(t *testing.T) {
 }
 
 func TestStoreWithJanitorInvalidConfigIgnored(t *testing.T) {
-	store := memory.NewStore[string, string](
-		memory.WithJanitor[string, string](nil, time.Second),
-		memory.WithJanitor[string, string](context.Background(), 0),
-		memory.WithNowFunc[string, string](nil),
+	store := memory.NewStore[string](
+		memory.WithJanitor(nil, time.Second),
+		memory.WithJanitor(context.Background(), 0),
+		memory.WithNowFunc(nil),
 	)
 	if store == nil {
 		t.Fatal("expected non-nil store")

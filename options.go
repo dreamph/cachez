@@ -1,27 +1,58 @@
 package cachez
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
-type Option[K comparable, V any] func(*cache[K, V])
-
-func WithDefaultTTL[K comparable, V any](ttl time.Duration) Option[K, V] {
-	return func(c *cache[K, V]) {
-		if ttl >= 0 {
-			c.defaultTTL = ttl
-		}
-	}
+type Option interface {
+	apply(target any)
 }
 
-func WithNowFunc[K comparable, V any](fn func() time.Time) Option[K, V] {
-	return func(c *cache[K, V]) {
-		if fn != nil {
-			c.now = fn
-		}
-	}
+type optionFunc func(target any)
+
+func (f optionFunc) apply(target any) {
+	f(target)
 }
 
-func WithHooks[K comparable, V any](hooks ...Hook[K, V]) Option[K, V] {
-	return func(c *cache[K, V]) {
-		c.hooks = append(c.hooks, hooks...)
+type hooksOption[V any] struct {
+	hooks []Hook[V]
+}
+
+func (o hooksOption[V]) apply(target any) {
+	c, ok := target.(*cache[V])
+	if !ok {
+		panic(fmt.Sprintf("cachez: hook option type mismatch: %T", target))
 	}
+	c.hooks = append(c.hooks, o.hooks...)
+}
+
+func WithDefaultTTL(ttl time.Duration) Option {
+	return optionFunc(func(target any) {
+		if ttl < 0 {
+			return
+		}
+		c, ok := target.(interface{ setDefaultTTL(time.Duration) })
+		if !ok {
+			return
+		}
+		c.setDefaultTTL(ttl)
+	})
+}
+
+func WithNowFunc(fn func() time.Time) Option {
+	return optionFunc(func(target any) {
+		if fn == nil {
+			return
+		}
+		c, ok := target.(interface{ setNowFunc(func() time.Time) })
+		if !ok {
+			return
+		}
+		c.setNowFunc(fn)
+	})
+}
+
+func WithHooks[V any](hooks ...Hook[V]) Option {
+	return hooksOption[V]{hooks: hooks}
 }

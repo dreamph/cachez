@@ -87,8 +87,8 @@ func TestStoreClearPrefixScoped(t *testing.T) {
 	ctx := context.Background()
 	client := setupClient(t)
 
-	a := redisstore.NewStore[string, string](client, redisstore.WithPrefix("cachez:a:"))
-	b := redisstore.NewStore[string, string](client, redisstore.WithPrefix("cachez:b:"))
+	a := redisstore.NewStore[string](client, redisstore.WithPrefix("cachez:a:"))
+	b := redisstore.NewStore[string](client, redisstore.WithPrefix("cachez:b:"))
 
 	if err := a.Set(ctx, "1", cachez.Entry[string]{Value: "a1"}); err != nil {
 		t.Fatalf("set a failed: %v", err)
@@ -149,7 +149,7 @@ func TestStoreGetInvalidPayload(t *testing.T) {
 
 	ctx := context.Background()
 	client := setupClient(t)
-	store := redisstore.NewStore[string, string](client, redisstore.WithPrefix("cachez:test:invalid:"))
+	store := redisstore.NewStore[string](client, redisstore.WithPrefix("cachez:test:invalid:"))
 
 	if err := client.Set(ctx, "cachez:test:invalid:k1", "not-json", 0).Err(); err != nil {
 		t.Fatalf("seed invalid payload failed: %v", err)
@@ -163,7 +163,7 @@ func TestStoreGetInvalidPayload(t *testing.T) {
 
 func TestStoreNilClientErrors(t *testing.T) {
 	ctx := context.Background()
-	store := redisstore.NewStore[string, string](nil)
+	store := redisstore.NewStore[string](nil)
 
 	if _, _, err := store.Get(ctx, "k"); err == nil {
 		t.Fatal("expected get error when client is nil")
@@ -189,7 +189,7 @@ func TestStoreWithNowFuncAndScanCount(t *testing.T) {
 	_, client := setupClientWithServer(t)
 	base := time.Unix(1_700_000_000, 0)
 
-	store := redisstore.NewStore[string, string](
+	store := redisstore.NewStore[string](
 		client,
 		redisstore.WithPrefix("cachez:test:opts:"),
 		redisstore.WithNowFunc(func() time.Time { return base }),
@@ -239,7 +239,7 @@ func TestStoreClearWithEmptyPrefixDisabledByDefault(t *testing.T) {
 
 	ctx := context.Background()
 	_, client := setupClientWithServer(t)
-	store := redisstore.NewStore[string, string](client, redisstore.WithPrefix(""))
+	store := redisstore.NewStore[string](client, redisstore.WithPrefix(""))
 
 	if err := client.Set(ctx, "external:key", "1", 0).Err(); err != nil {
 		t.Fatalf("seed failed: %v", err)
@@ -266,7 +266,7 @@ func TestStoreClearWithEmptyPrefixAllowed(t *testing.T) {
 
 	ctx := context.Background()
 	_, client := setupClientWithServer(t)
-	store := redisstore.NewStore[string, string](
+	store := redisstore.NewStore[string](
 		client,
 		redisstore.WithPrefix(""),
 		redisstore.WithAllowEmptyPrefixClear(),
@@ -292,11 +292,11 @@ func TestStoreClearWithEmptyPrefixAllowed(t *testing.T) {
 	}
 }
 
-func setupStringStore(t *testing.T, prefix string) (*goredis.Client, *redisstore.Store[string, string]) {
+func setupStringStore(t *testing.T, prefix string) (*goredis.Client, *redisstore.Store[string]) {
 	t.Helper()
 
 	client := setupClient(t)
-	store := redisstore.NewStore[string, string](client, redisstore.WithPrefix(prefix))
+	store := redisstore.NewStore[string](client, redisstore.WithPrefix(prefix))
 	return client, store
 }
 

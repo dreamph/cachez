@@ -8,16 +8,16 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-type cache[K comparable, V any] struct {
-	store       Store[K, V]
+type cache[V any] struct {
+	store       Store[V]
 	defaultTTL  time.Duration
 	now         func() time.Time
-	hooks       []Hook[K, V]
+	hooks       []Hook[V]
 	flightGroup singleflight.Group
 }
 
-func New[K comparable, V any](store Store[K, V], opts ...Option[K, V]) Cache[K, V] {
-	c := &cache[K, V]{
+func New[V any](store Store[V], opts ...Option) Cache[V] {
+	c := &cache[V]{
 		store:      store,
 		defaultTTL: 5 * time.Minute,
 		now:        time.Now,
@@ -25,43 +25,54 @@ func New[K comparable, V any](store Store[K, V], opts ...Option[K, V]) Cache[K, 
 	}
 
 	for _, opt := range opts {
-		opt(c)
+		if opt == nil {
+			continue
+		}
+		opt.apply(c)
 	}
 
 	return c
 }
 
-func (c *cache[K, V]) Get(ctx context.Context, key K) (V, bool, error) {
+func (c *cache[V]) setDefaultTTL(ttl time.Duration) {
+	c.defaultTTL = ttl
+}
+
+func (c *cache[V]) setNowFunc(fn func() time.Time) {
+	c.now = fn
+}
+
+func (c *cache[V]) Get(ctx context.Context, key string) (V, bool, error) {
 	entry, ok, err := c.store.Get(ctx, key)
 	if err != nil {
 		var zero V
-		c.emit(ctx, HookEvent[K, V]{Type: EventError, Key: key, Err: err})
+		c.emit(ctx, HookEvent[V]{Type: EventError, Key: key, Err: err})
 		return zero, false, err
 	}
 
 	if !ok {
 		var zero V
-		c.emit(ctx, HookEvent[K, V]{Type: EventMiss, Key: key})
+		c.emit(ctx, HookEvent[V]{Type: EventMiss, Key: key})
 		return zero, false, nil
 	}
 
 	if entry.Expired(c.now()) {
 		if err := c.store.Delete(ctx, key); err != nil {
 			var zero V
-			c.emit(ctx, HookEvent[K, V]{Type: EventError, Key: key, Err: err})
+			c.emit(ctx, HookEvent[V]{Type: EventError, Key: key, Err: err})
 			return zero, false, err
 		}
 		var zero V
-		c.emit(ctx, HookEvent[K, V]{Type: EventMiss, Key: key})
+		c.emit(ctx, HookEvent[V]{Type: EventMiss, Key: key})
 		return zero, false, nil
 	}
 
 	v := entry.Value
-	c.emit(ctx, HookEvent[K, V]{Type: EventHit, Key: key, Value: &v})
+	c.emit(ctx, HookEvent[V]{Type: EventHit, Key: key, Value: &v})
 	return v, true, nil
 }
 
-func (c *cache[K, V]) Set(ctx context.Context, key K, value V, ttl ...time.Duration) error {
+func (c *cache[V]) Set(ctx context.Context, key string, value V, ttl ...time.Duration) error {
 	effectiveTTL := c.defaultTTL
 	if len(ttl) > 0 {
 		effectiveTTL = ttl[0]
@@ -83,25 +94,25 @@ func (c *cache[K, V]) Set(ctx context.Context, key K, value V, ttl ...time.Durat
 	}
 
 	if err := c.store.Set(ctx, key, entry); err != nil {
-		c.emit(ctx, HookEvent[K, V]{Type: EventError, Key: key, Err: err})
+		c.emit(ctx, HookEvent[V]{Type: EventError, Key: key, Err: err})
 		return err
 	}
 
-	c.emit(ctx, HookEvent[K, V]{Type: EventSet, Key: key, Value: &value})
+	c.emit(ctx, HookEvent[V]{Type: EventSet, Key: key, Value: &value})
 	return nil
 }
 
-func (c *cache[K, V]) Delete(ctx context.Context, key K) error {
+func (c *cache[V]) Delete(ctx context.Context, key string) error {
 	if err := c.store.Delete(ctx, key); err != nil {
-		c.emit(ctx, HookEvent[K, V]{Type: EventError, Key: key, Err: err})
+		c.emit(ctx, HookEvent[V]{Type: EventError, Key: key, Err: err})
 		return err
 	}
 
-	c.emit(ctx, HookEvent[K, V]{Type: EventDelete, Key: key})
+	c.emit(ctx, HookEvent[V]{Type: EventDelete, Key: key})
 	return nil
 }
 
-func (c *cache[K, V]) Has(ctx context.Context, key K) (bool, error) {
+func (c *cache[V]) Has(ctx context.Context, key string) (bool, error) {
 	entry, ok, err := c.store.Get(ctx, key)
 	if err != nil {
 		return false, err
@@ -115,19 +126,17 @@ func (c *cache[K, V]) Has(ctx context.Context, key K) (bool, error) {
 	return true, nil
 }
 
-func (c *cache[K, V]) Clear(ctx context.Context) error {
+func (c *cache[V]) Clear(ctx context.Context) error {
 	if err := c.store.Clear(ctx); err != nil {
-		var zeroKey K
-		c.emit(ctx, HookEvent[K, V]{Type: EventError, Key: zeroKey, Err: err})
+		c.emit(ctx, HookEvent[V]{Type: EventError, Key: "", Err: err})
 		return err
 	}
 
-	var zeroKey K
-	c.emit(ctx, HookEvent[K, V]{Type: EventClear, Key: zeroKey})
+	c.emit(ctx, HookEvent[V]{Type: EventClear, Key: ""})
 	return nil
 }
 
-func (c *cache[K, V]) GetOrLoad(ctx context.Context, key K, ttl time.Duration, loader LoaderFunc[V]) (V, error) {
+func (c *cache[V]) GetOrLoad(ctx context.Context, key string, ttl time.Duration, loader LoaderFunc[V]) (V, error) {
 	if loader == nil {
 		var zero V
 		return zero, fmt.Errorf("loader is nil")
@@ -140,20 +149,18 @@ func (c *cache[K, V]) GetOrLoad(ctx context.Context, key K, ttl time.Duration, l
 		return v, nil
 	}
 
-	flightKey := fmt.Sprintf("%v", key)
-
-	result, err, _ := c.flightGroup.Do(flightKey, func() (any, error) {
+	result, err, _ := c.flightGroup.Do(key, func() (any, error) {
 		if v, ok, err := c.Get(ctx, key); err != nil {
 			var zero V
 			return zero, err
 		} else if ok {
-			c.emit(ctx, HookEvent[K, V]{Type: EventLoadHit, Key: key})
+			c.emit(ctx, HookEvent[V]{Type: EventLoadHit, Key: key})
 			return v, nil
 		}
 
 		v, err := loader(ctx)
 		if err != nil {
-			c.emit(ctx, HookEvent[K, V]{Type: EventError, Key: key, Err: err})
+			c.emit(ctx, HookEvent[V]{Type: EventError, Key: key, Err: err})
 			var zero V
 			return zero, err
 		}
@@ -163,7 +170,7 @@ func (c *cache[K, V]) GetOrLoad(ctx context.Context, key K, ttl time.Duration, l
 			return zero, err
 		}
 
-		c.emit(ctx, HookEvent[K, V]{Type: EventLoad, Key: key, Value: &v})
+		c.emit(ctx, HookEvent[V]{Type: EventLoad, Key: key, Value: &v})
 		return v, nil
 	})
 	if err != nil {
@@ -179,7 +186,7 @@ func (c *cache[K, V]) GetOrLoad(ctx context.Context, key K, ttl time.Duration, l
 	return v, nil
 }
 
-func (c *cache[K, V]) emit(ctx context.Context, event HookEvent[K, V]) {
+func (c *cache[V]) emit(ctx context.Context, event HookEvent[V]) {
 	for _, hook := range c.hooks {
 		if hook == nil {
 			continue

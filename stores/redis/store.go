@@ -19,7 +19,7 @@ type config struct {
 	allowEmptyPrefixClear bool
 }
 
-type Store[K comparable, V any] struct {
+type Store[V any] struct {
 	client                goredis.Cmdable
 	redisCache            *rediscache.Cache
 	prefix                string
@@ -60,7 +60,7 @@ func WithUnsafeAllowEmptyPrefixClear() Option {
 	return WithAllowEmptyPrefixClear()
 }
 
-func NewStore[K comparable, V any](client goredis.Cmdable, opts ...Option) *Store[K, V] {
+func NewStore[V any](client goredis.Cmdable, opts ...Option) *Store[V] {
 	cfg := config{
 		prefix:                "cachez:",
 		now:                   time.Now,
@@ -77,7 +77,7 @@ func NewStore[K comparable, V any](client goredis.Cmdable, opts ...Option) *Stor
 		rc = rediscache.New(&rediscache.Options{Redis: client})
 	}
 
-	return &Store[K, V]{
+	return &Store[V]{
 		client:                client,
 		redisCache:            rc,
 		prefix:                cfg.prefix,
@@ -87,7 +87,7 @@ func NewStore[K comparable, V any](client goredis.Cmdable, opts ...Option) *Stor
 	}
 }
 
-func (s *Store[K, V]) Get(ctx context.Context, key K) (cachez.Entry[V], bool, error) {
+func (s *Store[V]) Get(ctx context.Context, key string) (cachez.Entry[V], bool, error) {
 	if s.client == nil {
 		var zero cachez.Entry[V]
 		return zero, false, fmt.Errorf("redis client is nil")
@@ -106,7 +106,7 @@ func (s *Store[K, V]) Get(ctx context.Context, key K) (cachez.Entry[V], bool, er
 	return entry, true, nil
 }
 
-func (s *Store[K, V]) Set(ctx context.Context, key K, entry cachez.Entry[V]) error {
+func (s *Store[V]) Set(ctx context.Context, key string, entry cachez.Entry[V]) error {
 	if s.client == nil {
 		return fmt.Errorf("redis client is nil")
 	}
@@ -127,14 +127,14 @@ func (s *Store[K, V]) Set(ctx context.Context, key K, entry cachez.Entry[V]) err
 	})
 }
 
-func (s *Store[K, V]) Delete(ctx context.Context, key K) error {
+func (s *Store[V]) Delete(ctx context.Context, key string) error {
 	if s.client == nil {
 		return fmt.Errorf("redis client is nil")
 	}
 	return s.client.Del(ctx, s.redisKey(key)).Err()
 }
 
-func (s *Store[K, V]) Has(ctx context.Context, key K) (bool, error) {
+func (s *Store[V]) Has(ctx context.Context, key string) (bool, error) {
 	if s.client == nil {
 		return false, fmt.Errorf("redis client is nil")
 	}
@@ -146,7 +146,7 @@ func (s *Store[K, V]) Has(ctx context.Context, key K) (bool, error) {
 	return n > 0, nil
 }
 
-func (s *Store[K, V]) Clear(ctx context.Context) error {
+func (s *Store[V]) Clear(ctx context.Context) error {
 	if s.client == nil {
 		return fmt.Errorf("redis client is nil")
 	}
@@ -180,6 +180,6 @@ func (s *Store[K, V]) Clear(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store[K, V]) redisKey(key K) string {
-	return s.prefix + fmt.Sprintf("%v", key)
+func (s *Store[V]) redisKey(key string) string {
+	return s.prefix + key
 }

@@ -7,20 +7,20 @@ import (
 
 type LoaderFunc[V any] func(ctx context.Context) (V, error)
 
-type Cache[K comparable, V any] interface {
-	Get(ctx context.Context, key K) (V, bool, error)
-	Set(ctx context.Context, key K, value V, ttl ...time.Duration) error
-	Delete(ctx context.Context, key K) error
-	Has(ctx context.Context, key K) (bool, error)
+type Cache[V any] interface {
+	Get(ctx context.Context, key string) (V, bool, error)
+	Set(ctx context.Context, key string, value V, ttl ...time.Duration) error
+	Delete(ctx context.Context, key string) error
+	Has(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context) error
-	GetOrLoad(ctx context.Context, key K, ttl time.Duration, loader LoaderFunc[V]) (V, error)
+	GetOrLoad(ctx context.Context, key string, ttl time.Duration, loader LoaderFunc[V]) (V, error)
 }
 
-type Store[K comparable, V any] interface {
-	Get(ctx context.Context, key K) (Entry[V], bool, error)
-	Set(ctx context.Context, key K, entry Entry[V]) error
-	Delete(ctx context.Context, key K) error
-	Has(ctx context.Context, key K) (bool, error)
+type Store[V any] interface {
+	Get(ctx context.Context, key string) (Entry[V], bool, error)
+	Set(ctx context.Context, key string, entry Entry[V]) error
+	Delete(ctx context.Context, key string) error
+	Has(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context) error
 }
 

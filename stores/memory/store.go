@@ -8,44 +8,61 @@ import (
 	cachez "github.com/dreamph/cachez"
 )
 
-type Option[K comparable, V any] func(*Store[K, V])
+type Option func(*config)
 
-type Store[K comparable, V any] struct {
-	mu             sync.RWMutex
-	items          map[K]cachez.Entry[V]
+type config struct {
 	now            func() time.Time
 	janitorCtx     context.Context
 	janitorEnabled bool
 	janitorEvery   time.Duration
 }
 
-func WithNowFunc[K comparable, V any](now func() time.Time) Option[K, V] {
-	return func(s *Store[K, V]) {
+type Store[V any] struct {
+	mu             sync.RWMutex
+	items          map[string]cachez.Entry[V]
+	now            func() time.Time
+	janitorCtx     context.Context
+	janitorEnabled bool
+	janitorEvery   time.Duration
+}
+
+func WithNowFunc(now func() time.Time) Option {
+	return func(cfg *config) {
 		if now != nil {
-			s.now = now
+			cfg.now = now
 		}
 	}
 }
 
-func WithJanitor[K comparable, V any](ctx context.Context, interval time.Duration) Option[K, V] {
-	return func(s *Store[K, V]) {
+func WithJanitor(ctx context.Context, interval time.Duration) Option {
+	return func(cfg *config) {
 		if ctx == nil || interval <= 0 {
 			return
 		}
-		s.janitorCtx = ctx
-		s.janitorEvery = interval
-		s.janitorEnabled = true
+		cfg.janitorCtx = ctx
+		cfg.janitorEvery = interval
+		cfg.janitorEnabled = true
 	}
 }
 
-func NewStore[K comparable, V any](opts ...Option[K, V]) *Store[K, V] {
-	s := &Store[K, V]{
-		items: make(map[K]cachez.Entry[V]),
-		now:   time.Now,
+func NewStore[V any](opts ...Option) *Store[V] {
+	cfg := config{
+		now: time.Now,
 	}
 
 	for _, opt := range opts {
-		opt(s)
+		if opt == nil {
+			continue
+		}
+		opt(&cfg)
+	}
+
+	s := &Store[V]{
+		items:          make(map[string]cachez.Entry[V]),
+		now:            cfg.now,
+		janitorCtx:     cfg.janitorCtx,
+		janitorEnabled: cfg.janitorEnabled,
+		janitorEvery:   cfg.janitorEvery,
 	}
 
 	if s.janitorEnabled {
@@ -55,7 +72,7 @@ func NewStore[K comparable, V any](opts ...Option[K, V]) *Store[K, V] {
 	return s
 }
 
-func (m *Store[K, V]) Get(_ context.Context, key K) (cachez.Entry[V], bool, error) {
+func (m *Store[V]) Get(_ context.Context, key string) (cachez.Entry[V], bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -63,7 +80,7 @@ func (m *Store[K, V]) Get(_ context.Context, key K) (cachez.Entry[V], bool, erro
 	return entry, ok, nil
 }
 
-func (m *Store[K, V]) Set(_ context.Context, key K, entry cachez.Entry[V]) error {
+func (m *Store[V]) Set(_ context.Context, key string, entry cachez.Entry[V]) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -71,7 +88,7 @@ func (m *Store[K, V]) Set(_ context.Context, key K, entry cachez.Entry[V]) error
 	return nil
 }
 
-func (m *Store[K, V]) Delete(_ context.Context, key K) error {
+func (m *Store[V]) Delete(_ context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -79,7 +96,7 @@ func (m *Store[K, V]) Delete(_ context.Context, key K) error {
 	return nil
 }
 
-func (m *Store[K, V]) Has(_ context.Context, key K) (bool, error) {
+func (m *Store[V]) Has(_ context.Context, key string) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -87,22 +104,22 @@ func (m *Store[K, V]) Has(_ context.Context, key K) (bool, error) {
 	return ok, nil
 }
 
-func (m *Store[K, V]) Clear(_ context.Context) error {
+func (m *Store[V]) Clear(_ context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.items = make(map[K]cachez.Entry[V])
+	m.items = make(map[string]cachez.Entry[V])
 	return nil
 }
 
-func (m *Store[K, V]) Len() int {
+func (m *Store[V]) Len() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	return len(m.items)
 }
 
-func (m *Store[K, V]) DeleteExpired(nowFn func() time.Time) int {
+func (m *Store[V]) DeleteExpired(nowFn func() time.Time) int {
 	if nowFn == nil {
 		nowFn = m.now
 	}
@@ -125,7 +142,7 @@ func (m *Store[K, V]) DeleteExpired(nowFn func() time.Time) int {
 	return deleted
 }
 
-func (m *Store[K, V]) runJanitor() {
+func (m *Store[V]) runJanitor() {
 	ticker := time.NewTicker(m.janitorEvery)
 	defer ticker.Stop()
 
